@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Savings Tracker</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 600px; margin: 20px auto; padding: 0 10px; line-height: 1.6; }
+        .card { background: #f9f9f9; padding: 15px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #ddd; }
+        input, select, button { padding: 8px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+        button { background: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        button.remove { background: #dc3545; }
+        .flex { display: flex; gap: 10px; }
+        .tx { padding: 5px; border-bottom: 1px solid #eee; font-size: 0.9em; }
+    </style>
+</head>
+<body>
+
+    <h2>Savings & Goal Tracker</h2>
+
+    <div class="card">
+        <h3>Balance: £<span id="balance">0.00</span></h3>
+        <p>Goal: £<span id="goalDisplay">5000</span> (<span id="percent">0</span>%)</p>
+        <progress id="progress" value="0" max="100" style="width: 100%;"></progress>
+        <p>Days until target date: <span id="daysLeft">N/A</span></p>
+    </div>
+
+    <div class="card">
+        <h3>Add / Remove Money</h3>
+        <input type="number" id="amount" placeholder="Amount (£)" step="0.01">
+        <input type="text" id="desc" placeholder="Description (e.g., Weekly Save)">
+        <select id="category">
+            <option value="Savings">Savings</option>
+            <option value="Expense">Expense</option>
+            <option value="Bonus">Bonus</option>
+        </select>
+        <div class="flex">
+            <button onclick="addMoney()">+ Add Money</button>
+            <button class="remove" onclick="removeMoney()">- Remove Money</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Settings</h3>
+        <label>Target Goal (£):</label>
+        <input type="number" id="goal" placeholder="e.g. 5000">
+        <label>Target Date (or Birthday):</label>
+        <input type="date" id="birthday">
+        <button onclick="saveSettings()">Save Settings</button>
+    </div>
+
+    <div class="card">
+        <canvas id="chart"></canvas>
+    </div>
+
+    <div class="card">
+        <h3>Transaction History</h3>
+        <div id="transactions"></div>
+    </div>
+
+    <script>
+    let data = JSON.parse(localStorage.getItem('tracker')) || {
+        balance: 0, goal: 5000, birthday: '', transactions: []
+    };
+
+    // Cached elements so the script runs cleanly
+    const balance = document.getElementById('balance');
+    const goalDisplay = document.getElementById('goalDisplay');
+    const percent = document.getElementById('percent');
+    const progress = document.getElementById('progress');
+    const daysLeft = document.getElementById('daysLeft');
+    const transactions = document.getElementById('transactions');
+    const desc = document.getElementById('desc');
+    const category = document.getElementById('category');
+
+    function save(){
+        localStorage.setItem('tracker', JSON.stringify(data));
+        update();
+    }
+
+    function addMoney(){
+        let amount = Number(document.getElementById('amount').value);
+        if(!amount) return;
+        data.balance += amount;
+        data.transactions.push({amount, desc: desc.value, cat: category.value, date: new Date().toLocaleDateString()});
+        clearInputs();
+        save();
+    }
+
+    function removeMoney(){
+        let amount = Number(document.getElementById('amount').value);
+        if(!amount) return;
+        data.balance -= amount;
+        data.transactions.push({amount: -amount, desc: desc.value, cat: category.value, date: new Date().toLocaleDateString()});
+        clearInputs();
+        save();
+    }
+
+    function saveSettings(){
+        data.goal = Number(document.getElementById('goal').value) || data.goal;
+        data.birthday = document.getElementById('birthday').value;
+        save();
+    }
+
+    function clearInputs() {
+        document.getElementById('amount').value = '';
+        desc.value = '';
+    }
+
+    function update(){
+        balance.textContent = data.balance.toFixed(2);
+        goalDisplay.textContent = data.goal;
+        let p = data.goal ? ((data.balance / data.goal) * 100) : 0;
+        percent.textContent = p.toFixed(1);
+        progress.value = Math.min(100, p);
+
+        if(data.birthday){
+            let days = Math.ceil((new Date(data.birthday) - new Date()) / (1000 * 60 * 60 * 24));
+            daysLeft.textContent = days >= 0 ? days : "Passed";
+        }
+
+        // Fixed encoding typo in original script from 'Â£' to '£'
+        transactions.innerHTML = data.transactions.slice().reverse().map(t =>
+            `<div class="tx"><strong>${t.date}</strong> | ${t.cat} | ${t.desc} | £${t.amount.toFixed(2)}</div>`
+        ).join('');
+
+        drawChart();
+    }
+
+    let chart;
+    function drawChart(){
+        let labels = data.transactions.map((_, i) => i + 1);
+        let vals = []; 
+        let running = 0;
+        data.transactions.forEach(t => { running += t.amount; vals.push(running); });
+
+        // Don't draw graph elements if there's no data yet
+        if(vals.length === 0) return;
+
+        if(chart) chart.destroy();
+        chart = new Chart(document.getElementById('chart'), {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Balance History (£)',
+                    data: vals,
+                    borderColor: '#007bff',
+                    tension: 0.1
+                }]
+            }
+        });
+    }
+
+    // Run immediately on page load
+    update();
+    </script>
+</body>
+</html>
